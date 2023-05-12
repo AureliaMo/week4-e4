@@ -1,0 +1,164 @@
+---
+title: "week4-E4_demo"
+author: "AureliaMo"
+date: "2023-05-11"
+output: html_document
+---
+
+# Demo
+
+```{r}
+library(readr)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+
+library(sf)
+library(tmap)
+
+# library(SimilarityMeasures)
+```
+
+how to write a function in r
+```{r}
+
+testfun <- function(){
+  print("this function doesn't do anything")
+}
+testfun()
+
+testfun <- function(sometext){
+  print(sometext)
+}
+testfun("this function doesn't do anything") # doesnt work
+
+class(testfun)
+
+```
+
+
+```{r}
+
+my_age <- function(birthday, unit="days"){
+  now <- Sys.time()
+  difftime(now, birthday, units = unit)
+}
+
+my_age("1993-07-08", "mins")
+
+# careful with the variable names you use in the function. always specify the variables within the function
+```
+
+## Task 1: Write your own functions
+
+create a function for euclidean distance
+
+```{r}
+
+
+euclid <- function(x, y){
+  sqrt((lead(x)-x)^2 + (lead(y)-y)^2)
+}
+
+wildschwein <- read_delim("wildschwein_BE_2056.csv")
+
+wildschwein |> 
+  mutate(steplength = euclid(E, N))
+
+```
+`
+
+```{r}
+euclid <- function(x, y){
+  steplength <- sqrt((lead(x)-x)^2 + (lead(y)-y)^2)
+}
+
+euclid(x= c(0,1), y=c(2,4))
+# doesn't return anything, because the result is stored somewhere
+
+
+euclid <- function(x, y){
+  steplength <- sqrt((lead(x)-x)^2 + (lead(y)-y)^2)
+  return(steplength)
+}
+
+euclid(x= c(0,1), y=c(0,1))
+```
+
+## Task 2: prepare Analysis
+
+In the next tasks we will look for “meet” patterns in our wildboar data. To simplify this, we will only use a subset of our wildboar data: The individuals Rosa and Sabi for the timespan 01.04.2015 - 15.04.2015. 
+
+Meet: at the same time at the same place
+
+```{r}
+wildboar2<- wildschwein |> 
+  filter(TierName %in% c("Rosa", "Sabi")) |> 
+  # filter(TierName == "Rosa" | TierName == "Sabi")# its the same
+  filter(DatetimeUTC >= as.POSIXct("2015-04-01 00:00:00", tz = "UTC")) |> 
+  filter(DatetimeUTC <= as.POSIXct("2015-04-14 23:59:59", tz = "UTC"))
+
+wildboar2 |> 
+  ggplot(aes(E,N, colour=TierName))+
+  geom_point( alpha = .2)+
+  coord_equal()
+```
+
+## Task 3: Create Join Key
+now wee need to know when two animals were sampled at the same time
+we can do this by joining. but first we need to normalize the times
+
+```{r}
+wildboar2 <- wildboar2 |> 
+  select(-TierID, -CollarID) |> #remove unnecessary columns
+  mutate(Datetime_round = lubridate::round_date(DatetimeUTC, "15 minutes")) # rounds the times to the nearest 15 minutes
+
+rosa <- wildboar2 |> 
+  filter(TierName=="Rosa")
+
+sabi <- wildboar2 |> 
+  filter(TierName=="Sabi")
+
+# the sampling time is a little different. rosa was sampled at 00:00:10 and sabi at  00:00:11. so to use time as a join key, we need to somehow round or roll the times
+
+rosa_sabi <- inner_join(sabi, rosa, by="Datetime_round", suffix = c("_sabi", "_rosa"))
+
+meets <- rosa_sabi |> 
+  mutate(
+    distance = sqrt((E_sabi-E_rosa)^2 + (N_sabi-N_rosa)^2),
+    meet = distance < 100
+  )
+
+# to calculate the distance here we would need another function without lead()
+# 
+# euclid2 <- function(x, y, x2, y2){
+#   steplength <- sqrt((x-x2)^2 + (y-y2)^2)
+# }
+# 
+# rosa_sabi |> 
+#   mutate(
+#     distance = euclid2(E_sabi, N_sabi, E_rosa, N_rosa),
+#     meet = distance < 100
+#   )
+```
+
+
+## Task 5: Visualize data
+
+
+```{r}
+
+# filter for meets
+
+meets <- meets |> 
+  filter(meet==TRUE)
+
+ggplot(rosa, aes(E,N, colour=TierName), alpha = .2)+
+  geom_point(sabi, aes(E,N, colour=TierName), alpha = .2)+
+  geom_point(meets, aes(E_sabi, N_sabi))+
+  coord_equal()
+
+
+```
+
